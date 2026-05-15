@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "logcraft"
+name = "logcraft-aop"
 version = "0.1.0"
 description = "AOP-style declarative logging decorators powered by loguru"
 authors = [
@@ -21,6 +21,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: System :: Logging",
 ]
+
+packages = [{ include = "logcraft" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10"

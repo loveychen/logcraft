@@ -7,7 +7,7 @@
 ## 安装
 
 ```bash
-pip install logcraft
+pip install logcraft-aop
 ```
 
 ## 快速开始

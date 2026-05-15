@@ -9,7 +9,7 @@ It helps remove manual `logger.info(...)` boilerplate by injecting structured lo
 ## Install
 
 ```bash
-pip install logcraft
+pip install logcraft-aop
 ```
 
 ## Quick start
