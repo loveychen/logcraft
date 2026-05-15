@@ -1,6 +1,6 @@
 """Public API for logcraft."""
 
-from .logcraft._core import (
+from ._core import (
     DEFAULT_LOGGER_NAME,
     LogContext,
     Logger,
