@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "logcraft-aop"
-version = "0.1.0"
+version = "0.1.1"
 description = "AOP-style declarative logging decorators powered by loguru"
 authors = [
     "Lovey Chen <loveychen@github.com>",
