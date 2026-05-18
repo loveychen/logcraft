@@ -213,21 +213,26 @@ def admin_action(user_id: str, action: str) -> None:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数允许根据函数参数条件性地记录日志：
+`filter` 参数允许根据函数名称和参数条件性地记录日志：
 
 ```python
 # 只在金额 > 1000 时记录日志
-@log_calls(filter=lambda user_id, amount: amount > 1000)
+@log_calls(filter=lambda name, user_id, amount: amount > 1000)
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 
+# 只为名称包含 "important" 的函数记录日志
+@log_calls(filter=lambda name, *args, **kwargs: "important" in name)
+def important_operation(data: dict) -> None:
+    pass
+
 # 只为特定用户记录日志
-@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+@log_calls(filter=lambda name, user_id, **kwargs: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-过滤器函数的签名应与被装饰函数兼容。它接收函数的所有参数并返回：
+过滤器函数接收函数名称作为第一个参数，后跟函数的所有参数。它返回：
 - `True`：记录此调用
 - `False`：跳过此调用的日志
 
@@ -279,17 +284,17 @@ class Service:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数应用于类中的所有方法：
+`filter` 参数应用于类中的所有方法，并接收函数名称作为第一个参数：
 
 ```python
-# 只在处理重要项目时记录日志
-@log_class(filter=lambda self, *args, **kwargs: len(args) > 0 and args[0] > 100)
+# 只为名称包含 "process" 的方法记录日志
+@log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
 
     def validate(self, value: int) -> bool:
-        return value > 0
+        return value > 0  # 不记录日志（名称中没有 "process"）
 ```
 
 **白名单模式** (`default=False`)：

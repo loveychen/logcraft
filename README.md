@@ -194,21 +194,26 @@ fail.error || error=ValueError: bad
 
 **Conditional logging with filter:**
 
-The `filter` parameter allows you to conditionally log based on function arguments:
+The `filter` parameter allows you to conditionally log based on function name and arguments:
 
 ```python
 # Only log when amount > 1000
-@log_calls(filter=lambda user_id, amount: amount > 1000)
+@log_calls(filter=lambda name, user_id, amount: amount > 1000)
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 
+# Only log for specific functions by name
+@log_calls(filter=lambda name, *args, **kwargs: "important" in name)
+def important_operation(data: dict) -> None:
+    pass
+
 # Only log for specific users
-@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+@log_calls(filter=lambda name, user_id, **kwargs: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-The filter function should have a signature compatible with the decorated function. It receives all the function's arguments and returns:
+The filter function receives the function name as the first argument, followed by all the function's arguments. It returns:
 - `True`: Log this call
 - `False`: Skip logging for this call
 
@@ -260,17 +265,17 @@ class Service:
 
 **Conditional logging with filter:**
 
-The `filter` parameter applies to all methods in the class:
+The `filter` parameter applies to all methods in the class and receives the function name as first argument:
 
 ```python
-# Only log when processing important items
-@log_class(filter=lambda self, *args, **kwargs: len(args) > 0 and args[0] > 100)
+# Only log methods with "process" in the name
+@log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
 
     def validate(self, value: int) -> bool:
-        return value > 0
+        return value > 0  # Not logged (no "process" in name)
 ```
 
 **Opt-in mode** (`default=False`):

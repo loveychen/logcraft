@@ -120,9 +120,9 @@ def log_calls(
         include_result: Whether to include the return value in the log.
         message: Custom event name prefix. Defaults to function's qualified name.
         level: Log level (debug, info, warning, error).
-        filter: Optional callable that receives function arguments and returns
-                a bool indicating whether to log this call. Signature should match
-                the decorated function. Return True to log, False to skip logging.
+        filter: Optional callable that receives (func_name, *args, **kwargs) and returns
+                a bool indicating whether to log this call. func_name is the event prefix
+                (fn.__qualname__ or custom message). Return True to log, False to skip.
 
     Returns:
         The decorated function with logging enabled.
@@ -132,9 +132,9 @@ def log_calls(
         def my_function(x, y):
             return x + y
 
-        @log_calls(filter=lambda x, y: x > 0)
+        @log_calls(filter=lambda name, x, y: x > 0 and "important" in name)
         def conditional_log(x, y):
-            return x + y  # Only logs when x > 0
+            return x + y  # Only logs when x > 0 and "important" in function name
     """
 
     def decorator(fn: Any) -> Any:
@@ -146,7 +146,7 @@ def log_calls(
                 try:
                     sig = inspect.signature(fn)
                     bound = sig.bind(*args, **kwargs)
-                    if not filter(*bound.args, **bound.kwargs):
+                    if not filter(event_base, *bound.args, **bound.kwargs):
                         return await fn(*args, **kwargs)
                 except Exception:
                     pass
@@ -179,7 +179,7 @@ def log_calls(
                 try:
                     sig = inspect.signature(fn)
                     bound = sig.bind(*args, **kwargs)
-                    if not filter(*bound.args, **bound.kwargs):
+                    if not filter(event_base, *bound.args, **bound.kwargs):
                         return fn(*args, **kwargs)
                 except Exception:
                     pass
@@ -371,7 +371,7 @@ def log_class(
         skip_private: Whether to skip methods starting with underscore.
         include_result: Whether to include return values in logs.
         level: Log level (debug, info, warning, error).
-        filter: Optional callable that receives method arguments and returns
+        filter: Optional callable that receives (func_name, *args, **kwargs) and returns
                 a bool indicating whether to log this call. Applied to all methods.
 
     Returns:
@@ -391,10 +391,10 @@ def log_class(
             def internal_helper(self):
                 pass  # Not logged
 
-        @log_class(filter=lambda self, *args, **kwargs: args[0] > 0 if args else False)
+        @log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
         class ConditionalService:
             def process(self, value):
-                return value * 2  # Only logs when value > 0
+                return value * 2  # Only logs for methods with "process" in name
     """
 
     def decorator(klass: Any) -> Any:
