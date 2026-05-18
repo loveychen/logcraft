@@ -4,8 +4,7 @@ from typing import Any
 
 import pytest
 
-from logcraft import LogContext, log_calls, log_class, log_context, no_log
-from logcraft import _core
+from logcraft import LogContext, _core, log_calls, log_class, log_context, no_log
 
 
 class SpyLogger:
@@ -13,7 +12,7 @@ class SpyLogger:
         self.records = records
         self.bound = bound or {}
 
-    def bind(self, **ctx: Any) -> "SpyLogger":
+    def bind(self, **ctx: Any) -> SpyLogger:
         return SpyLogger(self.records, {**self.bound, **ctx})
 
     def _emit(self, level: str, event_name: str, **fields: Any) -> None:
@@ -47,7 +46,9 @@ def stub_logger(monkeypatch: pytest.MonkeyPatch, records: list[tuple[str, str, d
     return logger
 
 
-def test_log_calls_sync_success_and_error(records: list[tuple[str, str, dict[str, Any]]], stub_logger: SpyLogger) -> None:
+def test_log_calls_sync_success_and_error(
+    records: list[tuple[str, str, dict[str, Any]]], stub_logger: SpyLogger
+) -> None:
     @log_calls
     def add(a: int, b: int) -> int:
         return a + b
@@ -165,7 +166,6 @@ async def test_log_context_async(records: list[tuple[str, str, dict[str, Any]]],
 
 
 def test_log_context_error(records: list[tuple[str, str, dict[str, Any]]], stub_logger: SpyLogger) -> None:
-    with pytest.raises(RuntimeError):
-        with log_context("err.block", x=1):
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), log_context("err.block", x=1):
+        raise RuntimeError("boom")
     assert any(event == "err.block.error" for _, event, _ in records)
