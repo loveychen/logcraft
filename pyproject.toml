@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "logcraft-aop"
 version = "0.1.1"
-description = "AOP-style declarative logging decorators powered by loguru"
+description = "Framework-agnostic AOP-style logging decorators with optional loguru support"
 authors = [
     "Lovey Chen <loveychen@github.com>",
     "Copilot <223556219+Copilot@users.noreply.github.com>",
@@ -9,7 +9,7 @@ authors = [
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/loveychen/logcraft"
-keywords = ["logging", "loguru", "aop", "decorator", "structured-logging"]
+keywords = ["logging", "aop", "decorator", "structured-logging", "loguru"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

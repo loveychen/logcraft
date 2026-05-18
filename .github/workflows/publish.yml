@@ -1,0 +1,81 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - pypi
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: '1.8.0'
+
+      - name: Configure Poetry
+        run: |
+          poetry config pypi-token.pypi ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Generate version
+        id: version
+        run: |
+          # Get current date for version: YYYY.MM.DD
+          VERSION=$(date +'%Y.%m.%d')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Update version in pyproject.toml
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Use poetry to update version
+          poetry version $VERSION
+
+          # Commit the version change
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add pyproject.toml
+          git commit -m "chore: bump version to $VERSION" || echo "No changes to commit"
+          git push
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run tests
+        run: poetry run pytest -q
+
+      - name: Build package
+        run: poetry build
+
+      - name: Publish to PyPI
+        run: poetry publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## Changes
+
+            Automated release for version ${{ steps.version.outputs.version }}.
+
+            See [commits since last release](https://github.com/loveychen/logcraft/compare/v0.1.1...v${{ steps.version.outputs.version }}) for details.
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
