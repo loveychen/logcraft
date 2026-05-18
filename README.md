@@ -2,9 +2,15 @@
 
 [中文文档](README_zh.md)
 
-A lightweight AOP-style logging toolkit for Python, built on top of `loguru`.
+A lightweight AOP-style logging toolkit for Python with **framework-agnostic design**.
 
 It helps remove manual `logger.info(...)` boilerplate by injecting structured logs through decorators and context managers.
+
+**Key Features:**
+- 🎯 **Framework-agnostic**: Works with Python's standard `logging` module by default, with optional `loguru` support
+- 🔍 **Conditional logging**: Filter decorator support for fine-grained logging control
+- 📝 **Fully documented**: Comprehensive docstrings on all public APIs
+- 🛠️ **Code quality**: Built-in linting, formatting, and testing tools
 
 ## Install
 
@@ -12,11 +18,19 @@ It helps remove manual `logger.info(...)` boilerplate by injecting structured lo
 pip install logcraft-aop
 ```
 
+**Optional backends:**
+
+```bash
+# For loguru backend (optional)
+pip install logcraft-aop[loguru]
+```
+
 ## Quick start
 
 ```python
 from logcraft import get_logger, log_calls, log_class, no_log, log_context, setup_logging
 
+# Initialize with stdlib backend (default)
 setup_logging(level="INFO", enable_file=False)
 logger = get_logger(__name__)
 
@@ -24,6 +38,12 @@ logger = get_logger(__name__)
 @log_calls
 def add(a: int, b: int) -> int:
     return a + b
+
+
+# Conditional logging with filter
+@log_calls(filter=lambda x, y: x > 0)
+def conditional_add(x: int, y: int) -> int:
+    return x + y  # Only logs when x > 0
 
 
 @log_class(default=True, exclude=["helper"])
@@ -40,11 +60,33 @@ with log_context("batch.process", size=10) as ctx:
     ctx.bind(done=10)
 ```
 
+## Backend Selection
+
+Logcraft supports multiple logging backends. **Python's standard `logging` module is used by default**, making it framework-agnostic.
+
+### Using stdlib backend (default)
+
+```python
+from logcraft import setup_logging
+
+# Default is stdlib backend
+setup_logging(level="INFO", log_dir="logs")
+```
+
+### Using loguru backend
+
+```python
+from logcraft import setup_logging
+
+# Specify loguru backend in setup_logging
+setup_logging(backend="loguru", level="INFO", log_dir="logs")
+```
+
 ## API Reference
 
 ### `setup_logging()`
 
-Initialize the global loguru sink. Call once at program startup.
+Initialize the logging system. Call once at program startup.
 
 ```python
 from logcraft import setup_logging
@@ -52,14 +94,26 @@ from logcraft import setup_logging
 setup_logging(
     level="INFO",        # or set via LOG_LEVEL env var
     log_dir="logs",      # or set via LOGCRAFT_LOG_DIR env var
-    when="D",            # rotation interval unit: S/M/H/D/W/midnight
-    interval=1,          # rotation every N units
-    backup_count=3,      # number of rotated files to keep
-    enable_file=True,    # set False to disable file output
+    backend="stdlib",    # "stdlib" (default) or "loguru"
+    **options            # Backend-specific options
 )
 ```
 
 If `level` is omitted, it falls back to the `LOG_LEVEL` environment variable, then `"INFO"`. If `log_dir` is omitted, it falls back to `LOGCRAFT_LOG_DIR`, then `"logs"`.
+
+**Backend-specific options:**
+
+For `stdlib` backend:
+- `format`: Custom log format string
+- `datefmt`: Date format string
+- `enable_console`: Enable console output (default: `True`)
+- `enable_file`: Enable file output (default: `True`)
+
+For `loguru` backend:
+- `enable_console`: Enable console output (default: `True`)
+- `enable_file`: Enable file output (default: `True`)
+- `rotation`: Log rotation setting (default: `"1 day"`)
+- `retention`: Number of rotated files to keep (default: `3`)
 
 The log format is structured and includes timestamp, level, PID, thread ID, module, and line number:
 
@@ -69,16 +123,16 @@ The log format is structured and includes timestamp, level, PID, thread ID, modu
 
 ### `get_logger(name)`
 
-Return a `Logger` instance bound to the given module name.
+Return a `LoggerProtocol` instance bound to the given module name.
 
 ```python
 logger = get_logger(__name__)
 logger.info("user.login", user_id=42)
 ```
 
-### `Logger`
+### `LoggerProtocol`
 
-The wrapper around loguru that powers all logcraft output.
+The protocol that all logger backends implement. This replaces the previous `Logger` class.
 
 | Method | Description |
 |--------|-------------|
@@ -136,6 +190,27 @@ fail.error || error=ValueError: bad
 | `include_result` | `True` | Attach the return value as `result=` in the `.done` log |
 | `message` | `None` | Custom event name prefix (default is `fn.__qualname__`) |
 | `level` | `"info"` | Log level for `.done` events (`.error` always uses `error`) |
+| `filter` | `None` | Callable that receives function args and returns `bool` to decide whether to log |
+
+**Conditional logging with filter:**
+
+The `filter` parameter allows you to conditionally log based on function arguments:
+
+```python
+# Only log when amount > 1000
+@log_calls(filter=lambda user_id, amount: amount > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+
+# Only log for specific users
+@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+def admin_action(user_id: str, action: str) -> None:
+    pass
+```
+
+The filter function should have a signature compatible with the decorated function. It receives all the function's arguments and returns:
+- `True`: Log this call
+- `False`: Skip logging for this call
 
 **Custom event name:**
 
@@ -181,6 +256,22 @@ class Service:
 | `skip_private` | `True` | Automatically skip methods starting with `_` (dunder methods are always skipped) |
 | `include_result` | `False` | Whether to include return values in `.done` logs |
 | `level` | `"info"` | Log level for `.done` events |
+| `filter` | `None` | Callable that receives method args and returns `bool` to decide whether to log |
+
+**Conditional logging with filter:**
+
+The `filter` parameter applies to all methods in the class:
+
+```python
+# Only log when processing important items
+@log_class(filter=lambda self, *args, **kwargs: len(args) > 0 and args[0] > 100)
+class Processor:
+    def process(self, value: int) -> int:
+        return value * 2
+
+    def validate(self, value: int) -> bool:
+        return value > 0
+```
 
 **Opt-in mode** (`default=False`):
 
@@ -312,6 +403,10 @@ make install
 make test
 make build
 make clean
+make lint           # run ruff linting
+make format         # format code with ruff
+make fix            # auto-fix linting issues
+make check          # run all checks (lint + test)
 make publish-test   # publish to TestPyPI
 make publish        # publish to PyPI
 ```

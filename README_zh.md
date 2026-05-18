@@ -1,8 +1,14 @@
 # logcraft
 
-一个轻量级的 AOP 风格 Python 日志工具，基于 `loguru` 构建。
+一个轻量级的 AOP 风格 Python 日志工具，**框架无关设计**。
 
 通过装饰器和上下文管理器注入结构化日志，消除手动 `logger.info(...)` 的样板代码。
+
+**核心特性：**
+- 🎯 **框架无关**：默认使用 Python 标准 `logging` 模块，可选 `loguru` 支持
+- 🔍 **条件日志**：支持过滤器装饰器，实现细粒度日志控制
+- 📝 **完整文档**：所有公共 API 都有详细的 docstring
+- 🛠️ **代码质量**：内置 lint、format 和测试工具
 
 ## 安装
 
@@ -10,11 +16,19 @@
 pip install logcraft-aop
 ```
 
+**可选后端：**
+
+```bash
+# 安装 loguru 后端（可选）
+pip install logcraft-aop[loguru]
+```
+
 ## 快速开始
 
 ```python
 from logcraft import get_logger, log_calls, log_class, no_log, log_context, setup_logging
 
+# 使用 stdlib 后端初始化（默认）
 setup_logging(level="INFO", enable_file=False)
 logger = get_logger(__name__)
 
@@ -22,6 +36,12 @@ logger = get_logger(__name__)
 @log_calls
 def add(a: int, b: int) -> int:
     return a + b
+
+
+# 使用 filter 实现条件日志
+@log_calls(filter=lambda x, y: x > 0)
+def conditional_add(x: int, y: int) -> int:
+    return x + y  # 只在 x > 0 时记录日志
 
 
 @log_class(default=True, exclude=["helper"])
@@ -38,11 +58,33 @@ with log_context("batch.process", size=10) as ctx:
     ctx.bind(done=10)
 ```
 
+## 后端选择
+
+Logcraft 支持多种日志后端。**默认使用 Python 标准 `logging` 模块**，实现框架无关。
+
+### 使用 stdlib 后端（默认）
+
+```python
+from logcraft import setup_logging
+
+# 默认就是 stdlib 后端
+setup_logging(level="INFO", log_dir="logs")
+```
+
+### 使用 loguru 后端
+
+```python
+from logcraft import setup_logging
+
+# 在 setup_logging 中指定 loguru 后端
+setup_logging(backend="loguru", level="INFO", log_dir="logs")
+```
+
 ## API 参考
 
 ### `setup_logging()`
 
-初始化全局 loguru sink，在程序启动时调用一次。
+初始化日志系统，在程序启动时调用一次。
 
 ```python
 from logcraft import setup_logging
@@ -50,14 +92,26 @@ from logcraft import setup_logging
 setup_logging(
     level="INFO",        # 也可通过 LOG_LEVEL 环境变量设置
     log_dir="logs",      # 也可通过 LOGCRAFT_LOG_DIR 环境变量设置
-    when="D",            # 轮转间隔单位：S/M/H/D/W/midnight
-    interval=1,          # 每 N 个单位轮转一次
-    backup_count=3,      # 保留的轮转文件数量
-    enable_file=True,    # 设为 False 可禁用文件输出
+    backend="stdlib",    # "stdlib"（默认）或 "loguru"
+    **options            # 后端特定选项
 )
 ```
 
 如果省略 `level`，将依次回退到 `LOG_LEVEL` 环境变量和 `"INFO"`。如果省略 `log_dir`，将依次回退到 `LOGCRAFT_LOG_DIR` 环境变量和 `"logs"`。
+
+**后端特定选项：**
+
+对于 `stdlib` 后端：
+- `format`：自定义日志格式字符串
+- `datefmt`：日期格式字符串
+- `enable_console`：启用控制台输出（默认：`True`）
+- `enable_file`：启用文件输出（默认：`True`）
+
+对于 `loguru` 后端：
+- `enable_console`：启用控制台输出（默认：`True`）
+- `enable_file`：启用文件输出（默认：`True`）
+- `rotation`：日志轮转设置（默认：`"1 day"`）
+- `retention`：保留的轮转文件数量（默认：`3`）
 
 日志格式为结构化输出，包含时间戳、级别、PID、线程 ID、模块和行号：
 
@@ -67,16 +121,16 @@ setup_logging(
 
 ### `get_logger(name)`
 
-返回绑定到指定模块名的 `Logger` 实例。
+返回绑定到指定模块名的 `LoggerProtocol` 实例。
 
 ```python
 logger = get_logger(__name__)
 logger.info("user.login", user_id=42)
 ```
 
-### `Logger`
+### `LoggerProtocol`
 
-封装 loguru 的日志器，驱动所有 logcraft 输出。
+所有日志后端实现的协议。这替代了之前的 `Logger` 类。
 
 | 方法 | 说明 |
 |------|------|
@@ -134,6 +188,48 @@ fail.error || error=ValueError: bad
 | `include_result` | `True` | 在 `.done` 日志中附带返回值 `result=` |
 | `message` | `None` | 自定义事件名前缀（默认使用 `fn.__qualname__`） |
 | `level` | `"info"` | `.done` 事件的日志级别（`.error` 始终使用 `error`） |
+| `filter` | `None` | 接收函数参数并返回 `bool` 的可调用对象，决定是否记录日志 |
+
+**使用 filter 实现条件日志：**
+
+`filter` 参数允许根据函数参数条件性地记录日志：
+
+```python
+# 只在金额 > 1000 时记录日志
+@log_calls(filter=lambda user_id, amount: amount > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+
+# 只为特定用户记录日志
+@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+def admin_action(user_id: str, action: str) -> None:
+    pass
+```
+
+过滤器函数的签名应与被装饰函数兼容。它接收函数的所有参数并返回：
+- `True`：记录此调用
+- `False`：跳过此调用的日志
+| `filter` | `None` | 接收函数参数并返回 `bool` 的可调用对象，决定是否记录日志 |
+
+**使用 filter 实现条件日志：**
+
+`filter` 参数允许根据函数参数条件性地记录日志：
+
+```python
+# 只在金额 > 1000 时记录日志
+@log_calls(filter=lambda user_id, amount: amount > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+
+# 只为特定用户记录日志
+@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+def admin_action(user_id: str, action: str) -> None:
+    pass
+```
+
+过滤器函数的签名应与被装饰函数兼容。它接收函数的所有参数并返回：
+- `True`：记录此调用
+- `False`：跳过此调用的日志
 
 **自定义事件名：**
 
@@ -179,6 +275,22 @@ class Service:
 | `skip_private` | `True` | 自动跳过以 `_` 开头的方法（双下划线方法始终跳过） |
 | `include_result` | `False` | 是否在 `.done` 日志中包含返回值 |
 | `level` | `"info"` | `.done` 事件的日志级别 |
+| `filter` | `None` | 接收方法参数并返回 `bool` 的可调用对象，决定是否记录日志 |
+
+**使用 filter 实现条件日志：**
+
+`filter` 参数应用于类中的所有方法：
+
+```python
+# 只在处理重要项目时记录日志
+@log_class(filter=lambda self, *args, **kwargs: len(args) > 0 and args[0] > 100)
+class Processor:
+    def process(self, value: int) -> int:
+        return value * 2
+
+    def validate(self, value: int) -> bool:
+        return value > 0
+```
 
 **白名单模式** (`default=False`)：
 
@@ -310,6 +422,10 @@ make install
 make test
 make build
 make clean
+make lint           # 运行 ruff 代码检查
+make format         # 使用 ruff 格式化代码
+make fix            # 自动修复 lint 问题
+make check          # 运行所有检查（lint + test）
 make publish-test   # 发布到 TestPyPI
 make publish        # 发布到 PyPI
 ```

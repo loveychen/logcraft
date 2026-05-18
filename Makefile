@@ -38,7 +38,7 @@ format:
 	$(POETRY) run ruff format logcraft tests
 
 fix:
-	$(POETRY) run ruff check --fix logcraft tests
+	$(POETRY) run ruff check --fix --unsafe-fixes logcraft tests
 	$(POETRY) run ruff format logcraft tests
 
 check: lint test

@@ -9,7 +9,6 @@ This module provides the core logging infrastructure including:
 
 from __future__ import annotations
 
-import asyncio
 import functools
 import inspect
 import os
@@ -52,12 +51,11 @@ def _get_current_backend() -> StdlibBackend | LoguruBackend:
     return _backend
 
 
-def set_backend(backend_type: str = "stdlib", **options: Any) -> None:
-    """Set the logging backend.
+def _set_backend(backend_type: str = "stdlib") -> None:
+    """Set the logging backend (internal function).
 
     Args:
         backend_type: Backend type - "stdlib" or "loguru".
-        **options: Backend-specific options.
 
     Raises:
         ImportError: If loguru backend is requested but not installed.
@@ -208,7 +206,7 @@ def log_calls(
                 getattr(_log, level)(f"{event_base}.done", **params)
             return result
 
-        wrapper = async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
+        wrapper = async_wrapper if inspect.iscoroutinefunction(fn) else sync_wrapper
         wrapper._log_calls = True
         return wrapper
 
@@ -476,9 +474,9 @@ def setup_logging(
 
     # Set backend if different from current
     if backend == "loguru" and not isinstance(_backend, LoguruBackend if HAS_LOGURU else type(None)):
-        set_backend("loguru")
+        _set_backend("loguru")
     elif backend == "stdlib" and not isinstance(_backend, StdlibBackend):
-        set_backend("stdlib")
+        _set_backend("stdlib")
 
     raw_level = (level or os.getenv("LOG_LEVEL") or "INFO").upper()
     effective_dir = str(log_dir or DEFAULT_LOG_DIR)

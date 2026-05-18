@@ -8,7 +8,6 @@ from ._core import (
     log_class,
     log_context,
     no_log,
-    set_backend,
     setup_logging,
 )
 from ._protocol import LoggerProtocol
@@ -23,5 +22,4 @@ __all__ = [
     "log_class",
     "no_log",
     "log_context",
-    "set_backend",
 ]
