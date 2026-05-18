@@ -120,9 +120,9 @@ def log_calls(
         include_result: Whether to include the return value in the log.
         message: Custom event name prefix. Defaults to function's qualified name.
         level: Log level (debug, info, warning, error).
-        filter: Optional callable for conditional logging. Receives function arguments
-                plus a keyword argument `func_name` containing the event prefix.
-                Returns True to log, False to skip.
+        filter: Optional callable for conditional logging. Only passes parameters that
+                the filter accepts. Special parameter `func_name` is available if filter
+                has it. Returns True to log, False to skip.
 
     Returns:
         The decorated function with logging enabled.
@@ -132,24 +132,43 @@ def log_calls(
         def my_function(x, y):
             return x + y
 
-        # Filter by arguments only
-        @log_calls(filter=lambda x, y: x > 0)
+        # Filter only accepts x - other params ignored
+        @log_calls(filter=lambda x: x > 0)
         def conditional_log(x, y):
-            return x + y  # Only logs when x > 0
-
-        # Filter by function name (as keyword argument)
-        @log_calls(filter=lambda x, y, func_name="": "important" in func_name and x > 0)
-        def important_operation(x, y):
             return x + y
 
-        # Or use **kwargs to access func_name
-        @log_calls(filter=lambda x, y, **kw: "important" in kw.get("func_name", ""))
-        def another_operation(x, y):
-            return x + y
+        # Filter accepts specific params
+        @log_calls(filter=lambda user_id: user_id.startswith("admin_"))
+        def admin_action(user_id: str, action: str):
+            pass
+
+        # Filter accepts func_name for name-based filtering
+        @log_calls(filter=lambda func_name: "important" in func_name)
+        def important_operation(data: dict):
+            pass
     """
 
     def decorator(fn: Any) -> Any:
         event_base = message if message is not None else fn.__qualname__
+
+        # Analyze filter signature to determine what parameters it accepts
+        filter_params: set[str] = set()
+        filter_has_var_keyword = False  # **kwargs
+        filter_has_var_positional = False  # *args
+
+        if filter is not None:
+            try:
+                filter_sig = inspect.signature(filter)
+                for param_name, param in filter_sig.parameters.items():
+                    if param.kind == inspect.Parameter.VAR_KEYWORD:
+                        filter_has_var_keyword = True
+                    elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                        filter_has_var_positional = True
+                    else:
+                        filter_params.add(param_name)
+            except Exception:
+                filter_params = set()
+                filter_has_var_keyword = True  # Fallback: pass everything
 
         @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -157,7 +176,32 @@ def log_calls(
                 try:
                     sig = inspect.signature(fn)
                     bound = sig.bind(*args, **kwargs)
-                    should_log = filter(*bound.args, **bound.kwargs, func_name=event_base)
+                    all_params = dict(bound.arguments)
+
+                    # Build filter arguments
+                    filter_args: list[Any] = []
+                    filter_kwargs: dict[str, Any] = {}
+
+                    if filter_has_var_keyword:
+                        # Pass everything as kwargs
+                        filter_kwargs = {**all_params, "func_name": event_base}
+                    elif filter_has_var_positional:
+                        # Pass positional args, plus any matching named params
+                        filter_args = list(bound.args)
+                        for param_name in filter_params:
+                            if param_name == "func_name":
+                                filter_kwargs["func_name"] = event_base
+                            elif param_name in all_params:
+                                filter_kwargs[param_name] = all_params[param_name]
+                    else:
+                        # Only pass parameters that filter explicitly accepts
+                        for param_name in filter_params:
+                            if param_name == "func_name":
+                                filter_kwargs["func_name"] = event_base
+                            elif param_name in all_params:
+                                filter_kwargs[param_name] = all_params[param_name]
+
+                    should_log = filter(*filter_args, **filter_kwargs)
                     if not should_log:
                         return await fn(*args, **kwargs)
                 except Exception:
@@ -191,7 +235,32 @@ def log_calls(
                 try:
                     sig = inspect.signature(fn)
                     bound = sig.bind(*args, **kwargs)
-                    should_log = filter(*bound.args, **bound.kwargs, func_name=event_base)
+                    all_params = dict(bound.arguments)
+
+                    # Build filter arguments
+                    filter_args: list[Any] = []
+                    filter_kwargs: dict[str, Any] = {}
+
+                    if filter_has_var_keyword:
+                        # Pass everything as kwargs
+                        filter_kwargs = {**all_params, "func_name": event_base}
+                    elif filter_has_var_positional:
+                        # Pass positional args, plus any matching named params
+                        filter_args = list(bound.args)
+                        for param_name in filter_params:
+                            if param_name == "func_name":
+                                filter_kwargs["func_name"] = event_base
+                            elif param_name in all_params:
+                                filter_kwargs[param_name] = all_params[param_name]
+                    else:
+                        # Only pass parameters that filter explicitly accepts
+                        for param_name in filter_params:
+                            if param_name == "func_name":
+                                filter_kwargs["func_name"] = event_base
+                            elif param_name in all_params:
+                                filter_kwargs[param_name] = all_params[param_name]
+
+                    should_log = filter(*filter_args, **filter_kwargs)
                     if not should_log:
                         return fn(*args, **kwargs)
                 except Exception:
@@ -384,9 +453,8 @@ def log_class(
         skip_private: Whether to skip methods starting with underscore.
         include_result: Whether to include return values in logs.
         level: Log level (debug, info, warning, error).
-        filter: Optional callable for conditional logging. Can accept either:
-                - (name, *args, **kwargs) - receives function name as first arg
-                - (*args, **kwargs) - only receives function arguments
+        filter: Optional callable for conditional logging. Receives function arguments
+                and optionally `func_name` as keyword argument if the callable accepts it.
                 Returns True to log, False to skip. Applied to all methods.
 
     Returns:
@@ -412,8 +480,8 @@ def log_class(
             def process(self, value):
                 return value * 2
 
-        # Filter by name and arguments
-        @log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
+        # Filter by function name (must accept func_name or **kwargs)
+        @log_class(filter=lambda self, *args, func_name="", **kwargs: "process" in func_name)
         class ConditionalService:
             def process(self, value):
                 return value * 2  # Only logs for methods with "process" in name

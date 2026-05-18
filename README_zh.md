@@ -213,35 +213,40 @@ def admin_action(user_id: str, action: str) -> None:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数允许根据函数参数条件性地记录日志。函数名称通过关键字参数 `func_name` 传入。
+`filter` 参数智能地只传入它接受的参数。如果 filter 有 `**kwargs`，则传入所有参数。否则只传入显式命名的参数。特殊参数 `func_name` 在 filter 有该参数时可用。
 
-**1. 仅按参数过滤：**
+**1. Filter 只接受特定参数：**
 ```python
-# 只在金额 > 1000 时记录日志
-@log_calls(filter=lambda user_id, amount: amount > 1000)
-def process_payment(user_id: str, amount: float) -> str:
-    return "tx_123"
+# 只使用 x 参数 - y 被忽略
+@log_calls(filter=lambda x: x > 0)
+def process(x: int, y: int) -> int:
+    return x + y
 
-# 只为特定用户记录日志
-@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+# 只使用 user_id - action 被忽略
+@log_calls(filter=lambda user_id: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-**2. 按函数名称过滤（作为关键字参数）：**
+**2. Filter 接受 func_name 用于名称过滤：**
 ```python
-# 只为名称包含 "important" 的函数记录日志
-@log_calls(filter=lambda **kwargs: "important" in kwargs.get("func_name", ""))
+# 只使用 func_name - 其他参数被忽略
+@log_calls(filter=lambda func_name: "important" in func_name)
 def important_operation(data: dict) -> None:
     pass
 
-# 结合名称和参数
-@log_calls(filter=lambda user_id, amount, func_name="": "payment" in func_name and amount > 1000)
+# 结合 func_name 和其他参数
+@log_calls(filter=lambda user_id, func_name: "payment" in func_name and user_id.startswith("admin_"))
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 ```
 
-过滤器接收所有函数参数，以及 `func_name` 作为关键字参数。
+**3. Filter 接受 **kwargs（接收所有参数）：**
+```python
+@log_calls(filter=lambda **kwargs: kwargs.get("amount", 0) > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+```
 
 **自定义事件名：**
 
@@ -291,17 +296,23 @@ class Service:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数应用于类中的所有方法，函数名称通过关键字参数 `func_name` 传入：
+`filter` 参数智能地只传入它接受的参数。如果 filter 有 `**kwargs`，则传入所有参数。否则只传入显式命名的参数。特殊参数 `func_name` 在 filter 有该参数时可用。
 
 ```python
 # 只为名称包含 "process" 的方法记录日志
-@log_class(filter=lambda **kwargs: "process" in kwargs.get("func_name", ""))
+@log_class(filter=lambda func_name: "process" in func_name)
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
 
     def validate(self, value: int) -> bool:
         return value > 0  # 不记录日志（名称中没有 "process"）
+
+# 只按 value 过滤 - self 和 func_name 被忽略
+@log_class(filter=lambda value: value > 100)
+class Processor2:
+    def process(self, value: int) -> int:
+        return value * 2
 ```
 
 **白名单模式** (`default=False`)：

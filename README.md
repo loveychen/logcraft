@@ -194,35 +194,40 @@ fail.error || error=ValueError: bad
 
 **Conditional logging with filter:**
 
-The `filter` parameter allows you to conditionally log based on function arguments. The function name is available as a keyword argument `func_name`.
+The `filter` parameter intelligently passes only the parameters it accepts. If filter has `**kwargs`, all parameters are passed. Otherwise, only explicitly named parameters are passed. Special parameter `func_name` is available if filter has it.
 
-**1. Filter by arguments only:**
+**1. Filter accepts specific parameters only:**
 ```python
-# Only log when amount > 1000
-@log_calls(filter=lambda user_id, amount: amount > 1000)
-def process_payment(user_id: str, amount: float) -> str:
-    return "tx_123"
+# Only uses x parameter - y is ignored
+@log_calls(filter=lambda x: x > 0)
+def process(x: int, y: int) -> int:
+    return x + y
 
-# Only log for admin users
-@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
+# Only uses user_id - action is ignored
+@log_calls(filter=lambda user_id: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-**2. Filter by function name (as keyword argument):**
+**2. Filter accepts func_name for name-based filtering:**
 ```python
-# Only log functions with "important" in the name
-@log_calls(filter=lambda **kwargs: "important" in kwargs.get("func_name", ""))
+# Only uses func_name - all other params ignored
+@log_calls(filter=lambda func_name: "important" in func_name)
 def important_operation(data: dict) -> None:
     pass
 
-# Combine name and arguments
-@log_calls(filter=lambda user_id, amount, func_name="": "payment" in func_name and amount > 1000)
+# Combines func_name with other params
+@log_calls(filter=lambda user_id, func_name: "payment" in func_name and user_id.startswith("admin_"))
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 ```
 
-The filter receives all function arguments plus `func_name` as a keyword argument.
+**3. Filter accepts **kwargs (receives everything):**
+```python
+@log_calls(filter=lambda **kwargs: kwargs.get("amount", 0) > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+```
 
 **Custom event name:**
 
@@ -272,17 +277,23 @@ class Service:
 
 **Conditional logging with filter:**
 
-The `filter` parameter applies to all methods in the class. The function name is available as a keyword argument `func_name`.
+The `filter` parameter intelligently passes only the parameters it accepts. If filter has `**kwargs`, all parameters are passed. Otherwise, only explicitly named parameters are passed. Special parameter `func_name` is available if filter has it.
 
 ```python
 # Only log methods with "process" in the name
-@log_class(filter=lambda **kwargs: "process" in kwargs.get("func_name", ""))
+@log_class(filter=lambda func_name: "process" in func_name)
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
 
     def validate(self, value: int) -> bool:
         return value > 0  # Not logged (no "process" in name)
+
+# Filter by value only - self and func_name ignored
+@log_class(filter=lambda value: value > 100)
+class Processor2:
+    def process(self, value: int) -> int:
+        return value * 2
 ```
 
 **Opt-in mode** (`default=False`):
