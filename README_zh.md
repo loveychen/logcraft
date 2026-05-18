@@ -213,28 +213,35 @@ def admin_action(user_id: str, action: str) -> None:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数允许根据函数名称和参数条件性地记录日志：
+`filter` 参数允许根据函数参数条件性地记录日志。函数名称通过关键字参数 `func_name` 传入。
 
+**1. 仅按参数过滤：**
 ```python
 # 只在金额 > 1000 时记录日志
-@log_calls(filter=lambda name, user_id, amount: amount > 1000)
+@log_calls(filter=lambda user_id, amount: amount > 1000)
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 
-# 只为名称包含 "important" 的函数记录日志
-@log_calls(filter=lambda name, *args, **kwargs: "important" in name)
-def important_operation(data: dict) -> None:
-    pass
-
 # 只为特定用户记录日志
-@log_calls(filter=lambda name, user_id, **kwargs: user_id.startswith("admin_"))
+@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-过滤器函数接收函数名称作为第一个参数，后跟函数的所有参数。它返回：
-- `True`：记录此调用
-- `False`：跳过此调用的日志
+**2. 按函数名称过滤（作为关键字参数）：**
+```python
+# 只为名称包含 "important" 的函数记录日志
+@log_calls(filter=lambda **kwargs: "important" in kwargs.get("func_name", ""))
+def important_operation(data: dict) -> None:
+    pass
+
+# 结合名称和参数
+@log_calls(filter=lambda user_id, amount, func_name="": "payment" in func_name and amount > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+```
+
+过滤器接收所有函数参数，以及 `func_name` 作为关键字参数。
 
 **自定义事件名：**
 
@@ -284,11 +291,11 @@ class Service:
 
 **使用 filter 实现条件日志：**
 
-`filter` 参数应用于类中的所有方法，并接收函数名称作为第一个参数：
+`filter` 参数应用于类中的所有方法，函数名称通过关键字参数 `func_name` 传入：
 
 ```python
 # 只为名称包含 "process" 的方法记录日志
-@log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
+@log_class(filter=lambda **kwargs: "process" in kwargs.get("func_name", ""))
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
@@ -427,10 +434,7 @@ make install
 make test
 make build
 make clean
-make lint           # 运行 ruff 代码检查
-make format         # 使用 ruff 格式化代码
-make fix            # 自动修复 lint 问题
-make check          # 运行所有检查（lint + test）
+make lint           # 运行 ruff 代码检查和格式化
 make publish-test   # 发布到 TestPyPI
 make publish        # 发布到 PyPI
 ```

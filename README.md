@@ -194,28 +194,35 @@ fail.error || error=ValueError: bad
 
 **Conditional logging with filter:**
 
-The `filter` parameter allows you to conditionally log based on function name and arguments:
+The `filter` parameter allows you to conditionally log based on function arguments. The function name is available as a keyword argument `func_name`.
 
+**1. Filter by arguments only:**
 ```python
 # Only log when amount > 1000
-@log_calls(filter=lambda name, user_id, amount: amount > 1000)
+@log_calls(filter=lambda user_id, amount: amount > 1000)
 def process_payment(user_id: str, amount: float) -> str:
     return "tx_123"
 
-# Only log for specific functions by name
-@log_calls(filter=lambda name, *args, **kwargs: "important" in name)
-def important_operation(data: dict) -> None:
-    pass
-
-# Only log for specific users
-@log_calls(filter=lambda name, user_id, **kwargs: user_id.startswith("admin_"))
+# Only log for admin users
+@log_calls(filter=lambda user_id, **kwargs: user_id.startswith("admin_"))
 def admin_action(user_id: str, action: str) -> None:
     pass
 ```
 
-The filter function receives the function name as the first argument, followed by all the function's arguments. It returns:
-- `True`: Log this call
-- `False`: Skip logging for this call
+**2. Filter by function name (as keyword argument):**
+```python
+# Only log functions with "important" in the name
+@log_calls(filter=lambda **kwargs: "important" in kwargs.get("func_name", ""))
+def important_operation(data: dict) -> None:
+    pass
+
+# Combine name and arguments
+@log_calls(filter=lambda user_id, amount, func_name="": "payment" in func_name and amount > 1000)
+def process_payment(user_id: str, amount: float) -> str:
+    return "tx_123"
+```
+
+The filter receives all function arguments plus `func_name` as a keyword argument.
 
 **Custom event name:**
 
@@ -265,11 +272,11 @@ class Service:
 
 **Conditional logging with filter:**
 
-The `filter` parameter applies to all methods in the class and receives the function name as first argument:
+The `filter` parameter applies to all methods in the class. The function name is available as a keyword argument `func_name`.
 
 ```python
 # Only log methods with "process" in the name
-@log_class(filter=lambda name, self, *args, **kwargs: "process" in name)
+@log_class(filter=lambda **kwargs: "process" in kwargs.get("func_name", ""))
 class Processor:
     def process(self, value: int) -> int:
         return value * 2
@@ -408,10 +415,7 @@ make install
 make test
 make build
 make clean
-make lint           # run ruff linting
-make format         # format code with ruff
-make fix            # auto-fix linting issues
-make check          # run all checks (lint + test)
+make lint           # run ruff linting and formatting
 make publish-test   # publish to TestPyPI
 make publish        # publish to PyPI
 ```
